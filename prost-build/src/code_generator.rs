@@ -81,21 +81,23 @@ impl<'a> CodeGenerator<'a> {
             code_gen.package
         );
 
-        code_gen.path.push(4);
-        for (idx, message) in file.message_type.into_iter().enumerate() {
-            code_gen.path.push(idx as i32);
-            code_gen.append_message(message);
+        if !code_gen.config.service_only {
+            code_gen.path.push(4);
+            for (idx, message) in file.message_type.into_iter().enumerate() {
+                code_gen.path.push(idx as i32);
+                code_gen.append_message(message);
+                code_gen.path.pop();
+            }
             code_gen.path.pop();
-        }
-        code_gen.path.pop();
 
-        code_gen.path.push(5);
-        for (idx, desc) in file.enum_type.into_iter().enumerate() {
-            code_gen.path.push(idx as i32);
-            code_gen.append_enum(desc);
+            code_gen.path.push(5);
+            for (idx, desc) in file.enum_type.into_iter().enumerate() {
+                code_gen.path.push(idx as i32);
+                code_gen.append_enum(desc);
+                code_gen.path.pop();
+            }
             code_gen.path.pop();
         }
-        code_gen.path.pop();
 
         if code_gen.config.service_generator.is_some() {
             code_gen.path.push(6);
@@ -267,7 +269,11 @@ impl<'a> CodeGenerator<'a> {
     fn append_field_attributes(&mut self, fq_message_name: &str, field_name: &str) {
         assert_eq!(b'.', fq_message_name.as_bytes()[0]);
         let mut buf = String::new();
-        for attribute in self.config.field_attributes.get_field(fq_message_name, field_name) {
+        for attribute in self
+            .config
+            .field_attributes
+            .get_field(fq_message_name, field_name)
+        {
             for _ in 0..self.depth {
                 buf.push_str("    ");
             }

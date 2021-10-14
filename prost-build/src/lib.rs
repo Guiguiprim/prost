@@ -222,6 +222,7 @@ impl Default for BytesType {
 pub struct Config {
     file_descriptor_set_path: Option<PathBuf>,
     service_generator: Option<Box<dyn ServiceGenerator>>,
+    service_only: bool,
     map_type: PathMap<MapType>,
     bytes_type: PathMap<BytesType>,
     type_attributes: PathMap<String>,
@@ -447,6 +448,12 @@ impl Config {
     /// Configures the code generator to use the provided service generator.
     pub fn service_generator(&mut self, service_generator: Box<dyn ServiceGenerator>) -> &mut Self {
         self.service_generator = Some(service_generator);
+        self
+    }
+
+    /// Configures the code generator to only generate the services code.
+    pub fn service_only(&mut self, service_only: bool) -> &mut Self {
+        self.service_only = service_only;
         self
     }
 
@@ -838,6 +845,7 @@ impl default::Default for Config {
         Config {
             file_descriptor_set_path: None,
             service_generator: None,
+            service_only: false,
             map_type: PathMap::default(),
             bytes_type: PathMap::default(),
             type_attributes: PathMap::default(),
