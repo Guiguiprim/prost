@@ -1098,6 +1098,42 @@ pub mod message {
     }
 }
 
+pub struct MessageEncoding<M>(core::marker::PhantomData<M>);
+
+impl<M: Message + Default> Encoding for MessageEncoding<M> {
+    type Type = M;
+
+    #[inline]
+    fn encoded_len(tag: u32, value: &Self::Type) -> usize {
+        message::encoded_len(tag, value)
+    }
+
+    #[inline]
+    fn encode(tag: u32, value: &Self::Type, buf: &mut impl BufMut) {
+        message::encode(tag, value, buf);
+    }
+
+    #[inline]
+    fn merge<B: Buf>(
+        wire_type: WireType,
+        value: &mut Self::Type,
+        buf: &mut B,
+        ctx: DecodeContext,
+    ) -> Result<(), DecodeError> {
+        message::merge(wire_type, value, buf, ctx)
+    }
+
+    #[inline]
+    fn encoded_len_repeated(tag: u32, values: &[Self::Type]) -> usize {
+        message::encoded_len_repeated(tag, values)
+    }
+
+    #[inline]
+    fn encode_repeated(tag: u32, values: &[Self::Type], buf: &mut impl BufMut) {
+        message::encode_repeated(tag, values, buf);
+    }
+}
+
 pub mod group {
     use crate::error::DecodeErrorKind;
 
