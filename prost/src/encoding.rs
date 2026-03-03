@@ -135,6 +135,11 @@ pub trait Encoding {
     }
 }
 
+pub trait PackedEncoding: Encoding {
+    fn encoded_len_packed(tag: u32, values: &[Self::Type]) -> usize;
+    fn encode_packed(tag: u32, values: &[Self::Type], buf: &mut impl BufMut);
+}
+
 /// Encodes a Protobuf field key, which consists of a wire type designator and
 /// the field tag.
 #[inline]
@@ -280,17 +285,73 @@ macro_rules! merge_repeated_numeric {
 /// variable width numeric type.
 macro_rules! varint {
     ($ty:ty,
-     $proto_ty:ident) => (
+     $proto_ty:ident,
+     $encoding_ty:ident) => (
         varint!($ty,
                 $proto_ty,
+                $encoding_ty,
                 to_uint64(value) { *value as u64 },
                 from_uint64(value) { value as $ty });
     );
 
     ($ty:ty,
      $proto_ty:ident,
+     $encoding_ty:ident,
      to_uint64($to_uint64_value:ident) $to_uint64:expr,
      from_uint64($from_uint64_value:ident) $from_uint64:expr) => (
+
+        pub struct $encoding_ty;
+
+        impl Encoding for $encoding_ty {
+            type Type = $ty;
+
+            #[inline]
+            fn encoded_len(tag: u32, value: &Self::Type) -> usize {
+                $proto_ty::encoded_len(tag, value)
+            }
+
+            #[inline]
+            fn encode(tag: u32, value: &Self::Type, buf: &mut impl BufMut) {
+                $proto_ty::encode(tag, value, buf);
+            }
+
+            #[inline]
+            fn merge<B: Buf>(
+                wire_type: WireType,
+                value: &mut Self::Type,
+                buf: &mut B,
+                ctx: DecodeContext,
+            ) -> Result<(), DecodeError> {
+                $proto_ty::merge(wire_type, value, buf, ctx)
+            }
+
+            #[inline]
+            fn encoded_len_repeated(tag: u32, values: &[Self::Type]) -> usize {
+                $proto_ty::encoded_len_repeated(tag, values)
+            }
+
+            #[inline]
+            fn merge_repeated<B: Buf>(
+                wire_type: WireType,
+                values: &mut Vec<Self::Type>,
+                buf: &mut B,
+                ctx: DecodeContext,
+            ) -> Result<(), DecodeError> {
+                $proto_ty::merge_repeated(wire_type, values, buf, ctx)
+            }
+        }
+
+        impl PackedEncoding for $encoding_ty {
+            #[inline]
+            fn encoded_len_packed(tag: u32, values: &[Self::Type]) -> usize {
+                $proto_ty::encoded_len_packed(tag, values)
+            }
+
+            #[inline]
+            fn encode_packed(tag: u32, values: &[Self::Type], buf: &mut impl BufMut) {
+                $proto_ty::encode_packed(tag, values, buf);
+            }
+        }
 
          pub mod $proto_ty {
             use crate::encoding::*;
@@ -383,14 +444,14 @@ macro_rules! varint {
 
     );
 }
-varint!(bool, bool,
+varint!(bool, bool, BoolEncoding,
         to_uint64(value) u64::from(*value),
         from_uint64(value) value != 0);
-varint!(i32, int32);
-varint!(i64, int64);
-varint!(u32, uint32);
-varint!(u64, uint64);
-varint!(i32, sint32,
+varint!(i32, int32, I32Encoding);
+varint!(i64, int64, I64Encoding);
+varint!(u32, uint32, U32Encoding);
+varint!(u64, uint64, U64Encoding);
+varint!(i32, sint32, SI32Encoding,
 to_uint64(value) {
     ((value << 1) ^ (value >> 31)) as u32 as u64
 },
@@ -398,7 +459,7 @@ from_uint64(value) {
     let value = value as u32;
     ((value >> 1) as i32) ^ (-((value & 1) as i32))
 });
-varint!(i64, sint64,
+varint!(i64, sint64, SI64Encoding,
 to_uint64(value) {
     ((value << 1) ^ (value >> 63)) as u64
 },
@@ -413,8 +474,62 @@ macro_rules! fixed_width {
      $width:expr,
      $wire_type:expr,
      $proto_ty:ident,
+     $encoding_ty:ident,
      $put:ident,
      $get:ident) => {
+        pub struct $encoding_ty;
+
+        impl Encoding for $encoding_ty {
+            type Type = $ty;
+
+            #[inline]
+            fn encoded_len(tag: u32, value: &Self::Type) -> usize {
+                $proto_ty::encoded_len(tag, value)
+            }
+
+            #[inline]
+            fn encode(tag: u32, value: &Self::Type, buf: &mut impl BufMut) {
+                $proto_ty::encode(tag, value, buf);
+            }
+
+            #[inline]
+            fn merge<B: Buf>(
+                wire_type: WireType,
+                value: &mut Self::Type,
+                buf: &mut B,
+                ctx: DecodeContext,
+            ) -> Result<(), DecodeError> {
+                $proto_ty::merge(wire_type, value, buf, ctx)
+            }
+
+            #[inline]
+            fn encoded_len_repeated(tag: u32, values: &[Self::Type]) -> usize {
+                $proto_ty::encoded_len_repeated(tag, values)
+            }
+
+            #[inline]
+            fn merge_repeated<B: Buf>(
+                wire_type: WireType,
+                values: &mut Vec<Self::Type>,
+                buf: &mut B,
+                ctx: DecodeContext,
+            ) -> Result<(), DecodeError> {
+                $proto_ty::merge_repeated(wire_type, values, buf, ctx)
+            }
+        }
+
+        impl PackedEncoding for $encoding_ty {
+            #[inline]
+            fn encoded_len_packed(tag: u32, values: &[Self::Type]) -> usize {
+                $proto_ty::encoded_len_packed(tag, values)
+            }
+
+            #[inline]
+            fn encode_packed(tag: u32, values: &[Self::Type], buf: &mut impl BufMut) {
+                $proto_ty::encode_packed(tag, values, buf);
+            }
+        }
+
         pub mod $proto_ty {
             use crate::encoding::*;
 
@@ -510,6 +625,7 @@ fixed_width!(
     4,
     WireType::ThirtyTwoBit,
     float,
+    FloatEncoding,
     put_f32_le,
     get_f32_le
 );
@@ -518,6 +634,7 @@ fixed_width!(
     8,
     WireType::SixtyFourBit,
     double,
+    DoubleEncoding,
     put_f64_le,
     get_f64_le
 );
@@ -526,6 +643,7 @@ fixed_width!(
     4,
     WireType::ThirtyTwoBit,
     fixed32,
+    Fixed32Encoding,
     put_u32_le,
     get_u32_le
 );
@@ -534,6 +652,7 @@ fixed_width!(
     8,
     WireType::SixtyFourBit,
     fixed64,
+    Fixed64Encoding,
     put_u64_le,
     get_u64_le
 );
@@ -542,6 +661,7 @@ fixed_width!(
     4,
     WireType::ThirtyTwoBit,
     sfixed32,
+    SFixed32Encoding,
     put_i32_le,
     get_i32_le
 );
@@ -550,6 +670,7 @@ fixed_width!(
     8,
     WireType::SixtyFourBit,
     sfixed64,
+    SFixed64Encoding,
     put_i64_le,
     get_i64_le
 );
