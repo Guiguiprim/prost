@@ -400,17 +400,17 @@ pub struct TyWithEncoding<T> {
     // The underlying type
     ty: T,
     // The encoding type
-    encoding_ty: Option<Ident>,
+    encoding_ty: Ident,
     // The encoding module: this allows for encoding defined outside of `prost::encoding`
     encoding_module: Option<syn::Path>,
 }
 
 impl<T> TyWithEncoding<T> {
-    pub fn encoding_ty(&self, prost_path: &Path) -> Option<TokenStream> {
-        match (self.encoding_ty.as_ref(), self.encoding_module.as_ref()) {
-            (Some(ty), Some(module)) => Some(quote!(#module::#ty)),
-            (Some(ty), None) => Some(quote!(#prost_path::encoding::#ty)),
-            (None, _) => None,
+    pub fn encoding_ty(&self, prost_path: &Path) -> TokenStream {
+        let ty = &self.encoding_ty;
+        match self.encoding_module.as_ref() {
+            Some(module) => quote!(#module::#ty),
+            None => quote!(#prost_path::encoding::#ty),
         }
     }
 }

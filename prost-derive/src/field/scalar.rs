@@ -135,13 +135,8 @@ impl Field {
             Kind::Repeated => quote!(encode_repeated),
             Kind::Packed => quote!(encode_packed),
         };
-        let encode_fn = match self.ty.encoding_ty(prost_path) {
-            Some(encoding_ty) => quote!(#encoding_ty::#encode_fn),
-            None => {
-                let module = self.ty.ty.module();
-                quote!(#prost_path::encoding::#module::#encode_fn)
-            }
-        };
+        let encoding_ty = self.ty.encoding_ty(prost_path);
+        let encode_fn = quote!(#encoding_ty::#encode_fn);
         let tag = self.tag;
 
         match self.kind {
@@ -171,13 +166,8 @@ impl Field {
             Kind::Plain(..) | Kind::Optional(..) | Kind::Required(..) => quote!(merge),
             Kind::Repeated | Kind::Packed => quote!(merge_repeated),
         };
-        let merge_fn = match self.ty.encoding_ty(prost_path) {
-            Some(encoding_ty) => quote!(#encoding_ty::#merge_fn),
-            None => {
-                let module = self.ty.ty.module();
-                quote!(#prost_path::encoding::#module::#merge_fn)
-            }
-        };
+        let encoding_ty = self.ty.encoding_ty(prost_path);
+        let merge_fn = quote!(#encoding_ty::#merge_fn);
 
         match self.kind {
             Kind::Plain(..) | Kind::Required(..) | Kind::Repeated | Kind::Packed => quote! {
@@ -199,13 +189,8 @@ impl Field {
             Kind::Repeated => quote!(encoded_len_repeated),
             Kind::Packed => quote!(encoded_len_packed),
         };
-        let encoded_len_fn = match self.ty.encoding_ty(prost_path) {
-            Some(encoding_ty) => quote!(#encoding_ty::#encoded_len_fn),
-            None => {
-                let module = self.ty.ty.module();
-                quote!(#prost_path::encoding::#module::#encoded_len_fn)
-            }
-        };
+        let encoding_ty = self.ty.encoding_ty(prost_path);
+        let encoded_len_fn = quote!(#encoding_ty::#encoded_len_fn);
         let tag = self.tag;
 
         match self.kind {
@@ -578,13 +563,6 @@ impl Ty {
         }
     }
 
-    pub fn module(&self) -> Ident {
-        match *self {
-            Ty::Enumeration(..) => Ident::new("int32", Span::call_site()),
-            _ => Ident::new(self.as_str(), Span::call_site()),
-        }
-    }
-
     /// Returns false if the scalar type is length delimited (i.e., `string` or `bytes`).
     pub fn is_numeric(&self) -> bool {
         !matches!(self, Ty::String | Ty::Bytes)
@@ -631,35 +609,34 @@ impl TyWithEncoding<Ty> {
             bail!("the encoding attibute is not supported for enumerations");
         }
 
-        if encoding_ty.is_none() {
-            Ok(Self::default_encoding(ty))
-        } else {
-            Ok(Self {
+        match encoding_ty {
+            None => Ok(Self::default_encoding(ty)),
+            Some(encoding_ty) => Ok(Self {
                 ty,
                 encoding_ty,
                 encoding_module,
-            })
+            }),
         }
     }
 
     pub fn default_encoding(ty: Ty) -> Self {
         let encoding_ty = match ty {
-            Ty::Double => Some(Ident::new("DoubleEncoding", Span::call_site())),
-            Ty::Float => Some(Ident::new("FloatEncoding", Span::call_site())),
-            Ty::Int32 => Some(Ident::new("I32Encoding", Span::call_site())),
-            Ty::Int64 => Some(Ident::new("I64Encoding", Span::call_site())),
-            Ty::Uint32 => Some(Ident::new("U32Encoding", Span::call_site())),
-            Ty::Uint64 => Some(Ident::new("U64Encoding", Span::call_site())),
-            Ty::Sint32 => Some(Ident::new("SI32Encoding", Span::call_site())),
-            Ty::Sint64 => Some(Ident::new("SI64Encoding", Span::call_site())),
-            Ty::Fixed32 => Some(Ident::new("Fixed32Encoding", Span::call_site())),
-            Ty::Fixed64 => Some(Ident::new("Fixed64Encoding", Span::call_site())),
-            Ty::Sfixed32 => Some(Ident::new("SFixed32Encoding", Span::call_site())),
-            Ty::Sfixed64 => Some(Ident::new("SFixed64Encoding", Span::call_site())),
-            Ty::Bool => Some(Ident::new("BoolEncoding", Span::call_site())),
-            Ty::Bytes => Some(Ident::new("VecU8Encoding", Span::call_site())),
-            Ty::String => Some(Ident::new("StringEncoding", Span::call_site())),
-            Ty::Enumeration(_) => Some(Ident::new("I32Encoding", Span::call_site())),
+            Ty::Double => Ident::new("DoubleEncoding", Span::call_site()),
+            Ty::Float => Ident::new("FloatEncoding", Span::call_site()),
+            Ty::Int32 => Ident::new("I32Encoding", Span::call_site()),
+            Ty::Int64 => Ident::new("I64Encoding", Span::call_site()),
+            Ty::Uint32 => Ident::new("U32Encoding", Span::call_site()),
+            Ty::Uint64 => Ident::new("U64Encoding", Span::call_site()),
+            Ty::Sint32 => Ident::new("SI32Encoding", Span::call_site()),
+            Ty::Sint64 => Ident::new("SI64Encoding", Span::call_site()),
+            Ty::Fixed32 => Ident::new("Fixed32Encoding", Span::call_site()),
+            Ty::Fixed64 => Ident::new("Fixed64Encoding", Span::call_site()),
+            Ty::Sfixed32 => Ident::new("SFixed32Encoding", Span::call_site()),
+            Ty::Sfixed64 => Ident::new("SFixed64Encoding", Span::call_site()),
+            Ty::Bool => Ident::new("BoolEncoding", Span::call_site()),
+            Ty::Bytes => Ident::new("VecU8Encoding", Span::call_site()),
+            Ty::String => Ident::new("StringEncoding", Span::call_site()),
+            Ty::Enumeration(_) => Ident::new("I32Encoding", Span::call_site()),
         };
 
         Self {
@@ -670,23 +647,16 @@ impl TyWithEncoding<Ty> {
     }
 
     pub fn owned_type(&self, prost_path: &Path) -> TokenStream {
-        match (self.encoding_ty.as_ref(), self.encoding_module.as_ref()) {
-            (None, _) | (Some(_), None) => {
+        match self.encoding_module.as_ref() {
+            None => {
                 // for types with encoding in our control, we use direct type
                 // to make the generated code simpler and hopefully faster to compile
                 match self.ty {
                     Ty::Bytes => {
-                        if self
-                            .encoding_ty
-                            .as_ref()
-                            .is_none_or(|ty| ty == "VecU8Encoding")
-                        {
+                        if self.encoding_ty == "VecU8Encoding" {
                             quote! ( #prost_path::alloc::vec::Vec<u8> )
                         } else {
-                            assert!(self
-                                .encoding_ty
-                                .as_ref()
-                                .is_some_and(|ty| ty == "BytesEncoding"));
+                            assert!(self.encoding_ty == "BytesEncoding");
                             quote! ( #prost_path::bytes::Bytes )
                         }
                     }
@@ -696,7 +666,8 @@ impl TyWithEncoding<Ty> {
                     },
                 }
             }
-            (Some(ty), Some(module)) => {
+            Some(module) => {
+                let ty = &self.encoding_ty;
                 quote!(<#module::#ty as #prost_path::encoding::Encoding>::Type)
             }
         }

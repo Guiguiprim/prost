@@ -158,19 +158,9 @@ impl Field {
     /// Returns a statement which encodes the map field.
     pub fn encode(&self, prost_path: &Path, ident: TokenStream) -> TokenStream {
         let tag = self.tag;
-        let (ke, kl) = match self.key_ty.encoding_ty(prost_path) {
-            Some(encoding_ty) => (
-                quote!(#encoding_ty::encode),
-                quote!(#encoding_ty::encoded_len),
-            ),
-            None => {
-                let key_mod = self.key_ty.ty.module();
-                (
-                    quote!(#prost_path::encoding::#key_mod::encode),
-                    quote!(#prost_path::encoding::#key_mod::encoded_len),
-                )
-            }
-        };
+        let key_encoding_ty = self.key_ty.encoding_ty(prost_path);
+        let ke = quote!(#key_encoding_ty::encode);
+        let kl = quote!(#key_encoding_ty::encoded_len);
         let module = self.map_ty.module();
         match &self.value_ty {
             ValueTy::Scalar(TyWithEncoding {
@@ -193,19 +183,9 @@ impl Field {
                 }
             }
             ValueTy::Scalar(value_ty) => {
-                let (ve, vl) = match value_ty.encoding_ty(prost_path) {
-                    Some(encoding_ty) => (
-                        quote!(#encoding_ty::encode),
-                        quote!(#encoding_ty::encoded_len),
-                    ),
-                    None => {
-                        let val_mod = value_ty.ty.module();
-                        (
-                            quote!(#prost_path::encoding::#val_mod::encode),
-                            quote!(#prost_path::encoding::#val_mod::encoded_len),
-                        )
-                    }
-                };
+                let val_encoding_ty = value_ty.encoding_ty(prost_path);
+                let ve = quote!(#val_encoding_ty::encode);
+                let vl = quote!(#val_encoding_ty::encoded_len);
                 quote! {
                     #prost_path::encoding::#module::encode(
                         #ke,
@@ -235,13 +215,8 @@ impl Field {
     /// Returns an expression which evaluates to the result of merging a decoded key value pair
     /// into the map.
     pub fn merge(&self, prost_path: &Path, ident: TokenStream) -> TokenStream {
-        let km = match self.key_ty.encoding_ty(prost_path) {
-            Some(encoding_ty) => quote!(#encoding_ty::merge),
-            None => {
-                let key_mod = self.key_ty.ty.module();
-                quote!(#prost_path::encoding::#key_mod::merge)
-            }
-        };
+        let key_encoding_ty = self.key_ty.encoding_ty(prost_path);
+        let km = quote!(#key_encoding_ty::merge);
         let module = self.map_ty.module();
         match &self.value_ty {
             ValueTy::Scalar(TyWithEncoding {
@@ -262,13 +237,8 @@ impl Field {
                 }
             }
             ValueTy::Scalar(value_ty) => {
-                let vm = match value_ty.encoding_ty(prost_path) {
-                    Some(encoding_ty) => quote!(#encoding_ty::merge),
-                    None => {
-                        let val_mod = value_ty.ty.module();
-                        quote!(#prost_path::encoding::#val_mod::merge)
-                    }
-                };
+                let val_encoding_ty = value_ty.encoding_ty(prost_path);
+                let vm = quote!(#val_encoding_ty::merge);
                 quote!(#prost_path::encoding::#module::merge(#km, #vm, &mut #ident, buf, ctx))
             }
             ValueTy::Message => quote! {
@@ -286,13 +256,8 @@ impl Field {
     /// Returns an expression which evaluates to the encoded length of the map.
     pub fn encoded_len(&self, prost_path: &Path, ident: TokenStream) -> TokenStream {
         let tag = self.tag;
-        let kl = match self.key_ty.encoding_ty(prost_path) {
-            Some(encoding_ty) => quote!(#encoding_ty::encoded_len),
-            None => {
-                let key_mod = self.key_ty.ty.module();
-                quote!(#prost_path::encoding::#key_mod::encoded_len)
-            }
-        };
+        let key_encoding_ty = self.key_ty.encoding_ty(prost_path);
+        let kl = quote!(#key_encoding_ty::encoded_len);
         let module = self.map_ty.module();
         match &self.value_ty {
             ValueTy::Scalar(TyWithEncoding {
@@ -312,13 +277,8 @@ impl Field {
                 }
             }
             ValueTy::Scalar(value_ty) => {
-                let vl = match value_ty.encoding_ty(prost_path) {
-                    Some(encoding_ty) => quote!(#encoding_ty::encoded_len),
-                    None => {
-                        let val_mod = value_ty.ty.module();
-                        quote!(#prost_path::encoding::#val_mod::encoded_len)
-                    }
-                };
+                let val_encoding_ty = value_ty.encoding_ty(prost_path);
+                let vl = quote!(#val_encoding_ty::encoded_len);
                 quote!(#prost_path::encoding::#module::encoded_len(#kl, #vl, #tag, &#ident))
             }
             ValueTy::Message => quote! {
@@ -495,14 +455,13 @@ impl ValueTy {
                     bail!("the {prefix}_encoding attibute is not supported for enumerations");
                 }
 
-                if encoding_ty.is_some() {
-                    Ok(ValueTy::Scalar(TyWithEncoding {
+                match encoding_ty {
+                    Some(encoding_ty) => Ok(ValueTy::Scalar(TyWithEncoding {
                         ty: ty.ty,
                         encoding_ty,
                         encoding_module,
-                    }))
-                } else {
-                    Ok(ValueTy::Scalar(ty))
+                    })),
+                    None => Ok(ValueTy::Scalar(ty)),
                 }
             }
             ValueTy::Message => {
