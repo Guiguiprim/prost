@@ -556,15 +556,6 @@ impl Ty {
         }
     }
 
-    // TODO: remove (still use for map.rs keys)
-    pub fn rust_type(&self, prost_path: &Path) -> TokenStream {
-        match self {
-            Ty::String => quote!(#prost_path::alloc::string::String),
-            Ty::Bytes => quote!(#prost_path::alloc::vec::Vec),
-            _ => self.rust_ref_type(),
-        }
-    }
-
     // TODO: rename to 'ref_type'
     pub fn rust_ref_type(&self) -> TokenStream {
         match *self {

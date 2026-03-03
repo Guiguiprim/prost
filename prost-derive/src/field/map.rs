@@ -48,7 +48,7 @@ fn fake_scalar(ty: TyWithEncoding<scalar::Ty>) -> scalar::Field {
 #[derive(Clone)]
 pub struct Field {
     pub map_ty: MapTy,
-    pub key_ty: scalar::Ty,
+    pub key_ty: TyWithEncoding<scalar::Ty>,
     pub value_ty: ValueTy,
     pub tag: u32,
 }
@@ -59,6 +59,8 @@ impl Field {
         let mut tag = None;
         let mut value_encoding_ty = None;
         let mut value_encoding_module = None;
+        let mut key_encoding_ty = None;
+        let mut key_encoding_module = None;
 
         for attr in attrs {
             if let Some(t) = tag_attr(attr)? {
@@ -117,6 +119,18 @@ impl Field {
                     module,
                     "duplicate value_encoding_module attributes",
                 )?;
+            } else if let Some(ty) = ident_attr("key_encoding", attr)? {
+                set_option(
+                    &mut key_encoding_ty,
+                    ty,
+                    "duplicate key_encoding attributes",
+                )?;
+            } else if let Some(module) = path_attr("key_encoding_module", attr)? {
+                set_option(
+                    &mut key_encoding_module,
+                    module,
+                    "duplicate key_encoding_module attributes",
+                )?;
             } else {
                 return Ok(None);
             }
@@ -125,7 +139,7 @@ impl Field {
         Ok(match (types, tag.or(inferred_tag)) {
             (Some((map_ty, key_ty, value_ty)), Some(tag)) => Some(Field {
                 map_ty,
-                key_ty,
+                key_ty: TyWithEncoding::try_from(key_ty, key_encoding_ty, key_encoding_module)?,
                 value_ty: value_ty.with_encoding(
                     value_encoding_ty,
                     value_encoding_module,
@@ -144,9 +158,19 @@ impl Field {
     /// Returns a statement which encodes the map field.
     pub fn encode(&self, prost_path: &Path, ident: TokenStream) -> TokenStream {
         let tag = self.tag;
-        let key_mod = self.key_ty.module();
-        let ke = quote!(#prost_path::encoding::#key_mod::encode);
-        let kl = quote!(#prost_path::encoding::#key_mod::encoded_len);
+        let (ke, kl) = match self.key_ty.encoding_ty(prost_path) {
+            Some(encoding_ty) => (
+                quote!(#encoding_ty::encode),
+                quote!(#encoding_ty::encoded_len),
+            ),
+            None => {
+                let key_mod = self.key_ty.ty.module();
+                (
+                    quote!(#prost_path::encoding::#key_mod::encode),
+                    quote!(#prost_path::encoding::#key_mod::encoded_len),
+                )
+            }
+        };
         let module = self.map_ty.module();
         match &self.value_ty {
             ValueTy::Scalar(TyWithEncoding {
@@ -210,8 +234,13 @@ impl Field {
     /// Returns an expression which evaluates to the result of merging a decoded key value pair
     /// into the map.
     pub fn merge(&self, prost_path: &Path, ident: TokenStream) -> TokenStream {
-        let key_mod = self.key_ty.module();
-        let km = quote!(#prost_path::encoding::#key_mod::merge);
+        let km = match self.key_ty.encoding_ty(prost_path) {
+            Some(encoding_ty) => quote!(#encoding_ty::merge),
+            None => {
+                let key_mod = self.key_ty.ty.module();
+                quote!(#prost_path::encoding::#key_mod::merge)
+            }
+        };
         let module = self.map_ty.module();
         match &self.value_ty {
             ValueTy::Scalar(TyWithEncoding {
@@ -255,8 +284,13 @@ impl Field {
     /// Returns an expression which evaluates to the encoded length of the map.
     pub fn encoded_len(&self, prost_path: &Path, ident: TokenStream) -> TokenStream {
         let tag = self.tag;
-        let key_mod = self.key_ty.module();
-        let kl = quote!(#prost_path::encoding::#key_mod::encoded_len);
+        let kl = match self.key_ty.encoding_ty(prost_path) {
+            Some(encoding_ty) => quote!(#encoding_ty::encoded_len),
+            None => {
+                let key_mod = self.key_ty.ty.module();
+                quote!(#prost_path::encoding::#key_mod::encoded_len)
+            }
+        };
         let module = self.map_ty.module();
         match &self.value_ty {
             ValueTy::Scalar(TyWithEncoding {
@@ -306,12 +340,12 @@ impl Field {
             ..
         }) = &self.value_ty
         {
-            let key_ty = self.key_ty.rust_type(prost_path);
-            let key_ref_ty = self.key_ty.rust_ref_type();
+            let key_ty = self.key_ty.owned_type(prost_path);
+            let key_ref_ty = self.key_ty.ty.rust_ref_type();
 
             let get = Ident::new(&format!("get_{ident}"), Span::call_site());
             let insert = Ident::new(&format!("insert_{ident}"), Span::call_site());
-            let take_ref = if self.key_ty.is_numeric() {
+            let take_ref = if self.key_ty.ty.is_numeric() {
                 quote!(&)
             } else {
                 quote!()
@@ -354,9 +388,8 @@ impl Field {
         };
 
         // A fake field for generating the debug wrapper
-        let key_wrapper = fake_scalar(TyWithEncoding::default_encoding(self.key_ty.clone()))
-            .debug(prost_path, quote!(KeyWrapper));
-        let key = self.key_ty.rust_type(prost_path);
+        let key_wrapper = fake_scalar(self.key_ty.clone()).debug(prost_path, quote!(KeyWrapper));
+        let key = self.key_ty.owned_type(prost_path);
         let value_wrapper = self.value_ty.debug(prost_path);
         let libname = self.map_ty.lib();
         let fmt = quote! {
