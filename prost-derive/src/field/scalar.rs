@@ -627,8 +627,8 @@ impl TyWithEncoding<Ty> {
         if encoding_module.is_some() && encoding_ty.is_none() {
             bail!("encoding_module attribute can only be applied in pair with encoding attribute");
         }
-        if encoding_ty.is_some() && !matches!(ty, Ty::Bytes) {
-            bail!("only the bytes type support the encoding attibute");
+        if encoding_ty.is_some() && !matches!(ty, Ty::Bytes | Ty::String) {
+            bail!("only the bytes and string types support the encoding attibute");
         }
 
         if encoding_ty.is_none() {
@@ -645,6 +645,7 @@ impl TyWithEncoding<Ty> {
     pub fn default_encoding(ty: Ty) -> Self {
         let encoding_ty = match ty {
             Ty::Bytes => Some(Ident::new("VecU8Encoding", Span::call_site())),
+            Ty::String => Some(Ident::new("StringEncoding", Span::call_site())),
             _ => None,
         };
 

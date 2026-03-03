@@ -488,8 +488,9 @@ impl ValueTy {
                     );
                 }
 
-                if encoding_ty.is_some() && !matches!(ty.ty, scalar::Ty::Bytes) {
-                    bail!("only the bytes type support the {prefix}_encoding attibute");
+                if encoding_ty.is_some() && !matches!(ty.ty, scalar::Ty::Bytes | scalar::Ty::String)
+                {
+                    bail!("only bytes and string types support the {prefix}_encoding attibute");
                 }
 
                 if encoding_ty.is_some() {
