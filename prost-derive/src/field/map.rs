@@ -4,6 +4,7 @@ use quote::quote;
 use syn::punctuated::Punctuated;
 use syn::{Expr, ExprLit, Ident, Lit, Meta, MetaNameValue, Path, Token};
 
+use crate::field::message::MessageTy;
 use crate::field::{ident_attr, path_attr, scalar, set_option, tag_attr, TyWithEncoding};
 
 #[derive(Clone, Debug)]
@@ -198,17 +199,20 @@ impl Field {
                     );
                 }
             }
-            ValueTy::Message => quote! {
-                #prost_path::encoding::#module::encode(
+            ValueTy::Message(value_ty) => {
+                let val_encoding_ty = value_ty.encoding_ty(prost_path);
+                let ve = quote!(#val_encoding_ty::encode);
+                let vl = quote!(#val_encoding_ty::encoded_len);
+                quote!(#prost_path::encoding::#module::encode(
                     #ke,
                     #kl,
-                    #prost_path::encoding::message::encode,
-                    #prost_path::encoding::message::encoded_len,
+                    #ve,
+                    #vl,
                     #tag,
                     &#ident,
                     buf,
-                );
-            },
+                );)
+            }
         }
     }
 
@@ -241,15 +245,17 @@ impl Field {
                 let vm = quote!(#val_encoding_ty::merge);
                 quote!(#prost_path::encoding::#module::merge(#km, #vm, &mut #ident, buf, ctx))
             }
-            ValueTy::Message => quote! {
-                #prost_path::encoding::#module::merge(
+            ValueTy::Message(value_ty) => {
+                let val_encoding_ty = value_ty.encoding_ty(prost_path);
+                let vm = quote!(#val_encoding_ty::merge);
+                quote!(#prost_path::encoding::#module::merge(
                     #km,
-                    #prost_path::encoding::message::merge,
+                    #vm,
                     &mut #ident,
                     buf,
                     ctx,
-                )
-            },
+                ))
+            }
         }
     }
 
@@ -281,14 +287,16 @@ impl Field {
                 let vl = quote!(#val_encoding_ty::encoded_len);
                 quote!(#prost_path::encoding::#module::encoded_len(#kl, #vl, #tag, &#ident))
             }
-            ValueTy::Message => quote! {
-                #prost_path::encoding::#module::encoded_len(
+            ValueTy::Message(value_ty) => {
+                let val_encoding_ty = value_ty.encoding_ty(prost_path);
+                let vl = quote!(#val_encoding_ty::encoded_len);
+                quote!(#prost_path::encoding::#module::encoded_len(
                     #kl,
-                    #prost_path::encoding::message::encoded_len,
+                    #vl,
                     #tag,
                     &#ident,
-                )
-            },
+                ))
+            }
         }
     }
 
@@ -387,7 +395,7 @@ impl Field {
                     }
                 }
             }
-            ValueTy::Message => quote! {
+            ValueTy::Message(_) => quote! {
                 struct #wrapper_name<'a, V: 'a>(&'a ::#libname::collections::#type_name<#key, V>);
                 impl<'a, V> ::core::fmt::Debug for #wrapper_name<'a, V>
                 where
@@ -423,7 +431,7 @@ fn key_ty_from_str(s: &str) -> Result<scalar::Ty, Error> {
 #[derive(Clone, Debug)]
 pub enum ValueTy {
     Scalar(TyWithEncoding<scalar::Ty>),
-    Message,
+    Message(TyWithEncoding<MessageTy>),
 }
 
 impl ValueTy {
@@ -431,7 +439,9 @@ impl ValueTy {
         if let Ok(ty) = scalar::Ty::from_str(s) {
             Ok(ValueTy::Scalar(TyWithEncoding::try_from(ty, None, None)?))
         } else if s.trim() == "message" {
-            Ok(ValueTy::Message)
+            Ok(ValueTy::Message(TyWithEncoding::try_message_from(
+                None, None,
+            )?))
         } else {
             bail!("invalid map value type: {s}");
         }
@@ -464,16 +474,20 @@ impl ValueTy {
                     None => Ok(ValueTy::Scalar(ty)),
                 }
             }
-            ValueTy::Message => {
-                if encoding_ty.is_some() {
-                    bail!("message value type does not support the {prefix}_encoding attribute");
-                }
-                if encoding_module.is_some() {
+            ValueTy::Message(ty) => {
+                if encoding_module.is_some() && encoding_ty.is_none() {
                     bail!(
-                        "message value type does not support the {prefix}_encoding_module attribute"
+                        "{prefix}_encoding_module attribute can only be applied in pair with {prefix}_encoding attribute"
                     );
                 }
-                Ok(ValueTy::Message)
+                match encoding_ty {
+                    Some(encoding_ty) => Ok(ValueTy::Message(TyWithEncoding {
+                        ty: ty.ty,
+                        encoding_ty,
+                        encoding_module,
+                    })),
+                    None => Ok(ValueTy::Message(ty)),
+                }
             }
         }
     }
@@ -485,7 +499,7 @@ impl ValueTy {
     fn debug(&self, prost_path: &Path) -> TokenStream {
         match self {
             ValueTy::Scalar(ty) => fake_scalar(ty.clone()).debug(prost_path, quote!(ValueWrapper)),
-            ValueTy::Message => quote!(
+            ValueTy::Message(_) => quote!(
                 fn ValueWrapper<T>(v: T) -> T {
                     v
                 }
