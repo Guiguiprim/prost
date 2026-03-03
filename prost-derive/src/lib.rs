@@ -174,6 +174,7 @@ fn try_message(input: TokenStream) -> Result<TokenStream, Error> {
             #[allow(unused_variables)]
             fn encode_raw(&self, buf: &mut impl #prost_path::bytes::BufMut) {
                 use #prost_path::encoding::Encoding as _;
+                use #prost_path::encoding::PackedEncoding as _;
                 #(#encode)*
             }
 
@@ -197,6 +198,7 @@ fn try_message(input: TokenStream) -> Result<TokenStream, Error> {
             #[inline]
             fn encoded_len(&self) -> usize {
                 use #prost_path::encoding::Encoding as _;
+                use #prost_path::encoding::PackedEncoding as _;
                 0 #(+ #encoded_len)*
             }
 

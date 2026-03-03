@@ -627,8 +627,8 @@ impl TyWithEncoding<Ty> {
         if encoding_module.is_some() && encoding_ty.is_none() {
             bail!("encoding_module attribute can only be applied in pair with encoding attribute");
         }
-        if encoding_ty.is_some() && !matches!(ty, Ty::Bytes | Ty::String) {
-            bail!("only the bytes and string types support the encoding attibute");
+        if encoding_ty.is_some() && matches!(ty, Ty::Enumeration(_)) {
+            bail!("the encoding attibute is not supported for enumerations");
         }
 
         if encoding_ty.is_none() {
@@ -644,6 +644,19 @@ impl TyWithEncoding<Ty> {
 
     pub fn default_encoding(ty: Ty) -> Self {
         let encoding_ty = match ty {
+            Ty::Double => Some(Ident::new("DoubleEncoding", Span::call_site())),
+            Ty::Float => Some(Ident::new("FloatEncoding", Span::call_site())),
+            Ty::Int32 => Some(Ident::new("I32Encoding", Span::call_site())),
+            Ty::Int64 => Some(Ident::new("I64Encoding", Span::call_site())),
+            Ty::Uint32 => Some(Ident::new("U32Encoding", Span::call_site())),
+            Ty::Uint64 => Some(Ident::new("U64Encoding", Span::call_site())),
+            Ty::Sint32 => Some(Ident::new("SI32Encoding", Span::call_site())),
+            Ty::Sint64 => Some(Ident::new("SI64Encoding", Span::call_site())),
+            Ty::Fixed32 => Some(Ident::new("Fixed32Encoding", Span::call_site())),
+            Ty::Fixed64 => Some(Ident::new("Fixed64Encoding", Span::call_site())),
+            Ty::Sfixed32 => Some(Ident::new("SFixed32Encoding", Span::call_site())),
+            Ty::Sfixed64 => Some(Ident::new("SFixed64Encoding", Span::call_site())),
+            Ty::Bool => Some(Ident::new("BoolEncoding", Span::call_site())),
             Ty::Bytes => Some(Ident::new("VecU8Encoding", Span::call_site())),
             Ty::String => Some(Ident::new("StringEncoding", Span::call_site())),
             _ => None,
