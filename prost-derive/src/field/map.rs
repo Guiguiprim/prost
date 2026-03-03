@@ -163,19 +163,22 @@ impl Field {
         let ke = quote!(#key_encoding_ty::encode);
         let kl = quote!(#key_encoding_ty::encoded_len);
         let module = self.map_ty.module();
+
+        let val_encoding_ty = self.value_ty.encoding_ty(prost_path);
+        let ve = quote!(#val_encoding_ty::encode);
+        let vl = quote!(#val_encoding_ty::encoded_len);
         match &self.value_ty {
             ValueTy::Scalar(TyWithEncoding {
                 ty: scalar::Ty::Enumeration(ty),
                 ..
             }) => {
                 let default = quote!(#ty::default() as i32);
-                let enum_encoding = quote!(#prost_path::encoding::I32Encoding);
                 quote! {
                     #prost_path::encoding::#module::encode_with_default(
                         #ke,
                         #kl,
-                        #enum_encoding::encode,
-                        #enum_encoding::encoded_len,
+                        #ve,
+                        #vl,
                         &(#default),
                         #tag,
                         &#ident,
@@ -183,27 +186,8 @@ impl Field {
                     );
                 }
             }
-            ValueTy::Scalar(value_ty) => {
-                let val_encoding_ty = value_ty.encoding_ty(prost_path);
-                let ve = quote!(#val_encoding_ty::encode);
-                let vl = quote!(#val_encoding_ty::encoded_len);
-                quote! {
-                    #prost_path::encoding::#module::encode(
-                        #ke,
-                        #kl,
-                        #ve,
-                        #vl,
-                        #tag,
-                        &#ident,
-                        buf,
-                    );
-                }
-            }
-            ValueTy::Message(value_ty) => {
-                let val_encoding_ty = value_ty.encoding_ty(prost_path);
-                let ve = quote!(#val_encoding_ty::encode);
-                let vl = quote!(#val_encoding_ty::encoded_len);
-                quote!(#prost_path::encoding::#module::encode(
+            _ => quote! {
+                #prost_path::encoding::#module::encode(
                     #ke,
                     #kl,
                     #ve,
@@ -211,8 +195,8 @@ impl Field {
                     #tag,
                     &#ident,
                     buf,
-                );)
-            }
+                );
+            },
         }
     }
 
@@ -222,17 +206,18 @@ impl Field {
         let key_encoding_ty = self.key_ty.encoding_ty(prost_path);
         let km = quote!(#key_encoding_ty::merge);
         let module = self.map_ty.module();
+        let val_encoding_ty = self.value_ty.encoding_ty(prost_path);
+        let vm = quote!(#val_encoding_ty::merge);
         match &self.value_ty {
             ValueTy::Scalar(TyWithEncoding {
                 ty: scalar::Ty::Enumeration(ty),
                 ..
             }) => {
                 let default = quote!(#ty::default() as i32);
-                let enum_encoding = quote!(#prost_path::encoding::I32Encoding);
                 quote! {
                     #prost_path::encoding::#module::merge_with_default(
                         #km,
-                        #enum_encoding::merge,
+                        #vm,
                         #default,
                         &mut #ident,
                         buf,
@@ -240,22 +225,7 @@ impl Field {
                     )
                 }
             }
-            ValueTy::Scalar(value_ty) => {
-                let val_encoding_ty = value_ty.encoding_ty(prost_path);
-                let vm = quote!(#val_encoding_ty::merge);
-                quote!(#prost_path::encoding::#module::merge(#km, #vm, &mut #ident, buf, ctx))
-            }
-            ValueTy::Message(value_ty) => {
-                let val_encoding_ty = value_ty.encoding_ty(prost_path);
-                let vm = quote!(#val_encoding_ty::merge);
-                quote!(#prost_path::encoding::#module::merge(
-                    #km,
-                    #vm,
-                    &mut #ident,
-                    buf,
-                    ctx,
-                ))
-            }
+            _ => quote! {#prost_path::encoding::#module::merge(#km, #vm, &mut #ident, buf, ctx)},
         }
     }
 
@@ -265,38 +235,25 @@ impl Field {
         let key_encoding_ty = self.key_ty.encoding_ty(prost_path);
         let kl = quote!(#key_encoding_ty::encoded_len);
         let module = self.map_ty.module();
+        let val_encoding_ty = self.value_ty.encoding_ty(prost_path);
+        let vl = quote!(#val_encoding_ty::encoded_len);
         match &self.value_ty {
             ValueTy::Scalar(TyWithEncoding {
                 ty: scalar::Ty::Enumeration(ty),
                 ..
             }) => {
                 let default = quote!(#ty::default() as i32);
-                let enum_encoding = quote!(#prost_path::encoding::I32Encoding);
                 quote! {
                     #prost_path::encoding::#module::encoded_len_with_default(
                         #kl,
-                        #enum_encoding::encoded_len,
+                        #vl,
                         &(#default),
                         #tag,
                         &#ident,
                     )
                 }
             }
-            ValueTy::Scalar(value_ty) => {
-                let val_encoding_ty = value_ty.encoding_ty(prost_path);
-                let vl = quote!(#val_encoding_ty::encoded_len);
-                quote!(#prost_path::encoding::#module::encoded_len(#kl, #vl, #tag, &#ident))
-            }
-            ValueTy::Message(value_ty) => {
-                let val_encoding_ty = value_ty.encoding_ty(prost_path);
-                let vl = quote!(#val_encoding_ty::encoded_len);
-                quote!(#prost_path::encoding::#module::encoded_len(
-                    #kl,
-                    #vl,
-                    #tag,
-                    &#ident,
-                ))
-            }
+            _ => quote! {#prost_path::encoding::#module::encoded_len(#kl, #vl, #tag, &#ident)},
         }
     }
 
@@ -489,6 +446,13 @@ impl ValueTy {
                     None => Ok(ValueTy::Message(ty)),
                 }
             }
+        }
+    }
+
+    fn encoding_ty(&self, prost_path: &Path) -> TokenStream {
+        match self {
+            ValueTy::Scalar(ty) => ty.encoding_ty(prost_path),
+            ValueTy::Message(ty) => ty.encoding_ty(prost_path),
         }
     }
 
