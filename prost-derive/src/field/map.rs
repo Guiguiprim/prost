@@ -178,12 +178,13 @@ impl Field {
                 ..
             }) => {
                 let default = quote!(#ty::default() as i32);
+                let enum_encoding = quote!(#prost_path::encoding::I32Encoding);
                 quote! {
                     #prost_path::encoding::#module::encode_with_default(
                         #ke,
                         #kl,
-                        #prost_path::encoding::int32::encode,
-                        #prost_path::encoding::int32::encoded_len,
+                        #enum_encoding::encode,
+                        #enum_encoding::encoded_len,
                         &(#default),
                         #tag,
                         &#ident,
@@ -248,10 +249,11 @@ impl Field {
                 ..
             }) => {
                 let default = quote!(#ty::default() as i32);
+                let enum_encoding = quote!(#prost_path::encoding::I32Encoding);
                 quote! {
                     #prost_path::encoding::#module::merge_with_default(
                         #km,
-                        #prost_path::encoding::int32::merge,
+                        #enum_encoding::merge,
                         #default,
                         &mut #ident,
                         buf,
@@ -298,10 +300,11 @@ impl Field {
                 ..
             }) => {
                 let default = quote!(#ty::default() as i32);
+                let enum_encoding = quote!(#prost_path::encoding::I32Encoding);
                 quote! {
                     #prost_path::encoding::#module::encoded_len_with_default(
                         #kl,
-                        #prost_path::encoding::int32::encoded_len,
+                        #enum_encoding::encoded_len,
                         &(#default),
                         #tag,
                         &#ident,

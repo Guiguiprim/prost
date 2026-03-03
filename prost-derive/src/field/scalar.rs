@@ -659,7 +659,7 @@ impl TyWithEncoding<Ty> {
             Ty::Bool => Some(Ident::new("BoolEncoding", Span::call_site())),
             Ty::Bytes => Some(Ident::new("VecU8Encoding", Span::call_site())),
             Ty::String => Some(Ident::new("StringEncoding", Span::call_site())),
-            _ => None,
+            Ty::Enumeration(_) => Some(Ident::new("I32Encoding", Span::call_site())),
         };
 
         Self {
