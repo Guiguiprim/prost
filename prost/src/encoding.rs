@@ -664,6 +664,32 @@ pub mod string {
     }
 }
 
+pub struct StringEncoding;
+
+impl Encoding for StringEncoding {
+    type Type = String;
+
+    #[inline]
+    fn encoded_len(tag: u32, value: &Self::Type) -> usize {
+        string::encoded_len(tag, value)
+    }
+
+    #[inline]
+    fn encode(tag: u32, value: &Self::Type, buf: &mut impl BufMut) {
+        string::encode(tag, value, buf);
+    }
+
+    #[inline]
+    fn merge<B: Buf>(
+        wire_type: WireType,
+        value: &mut Self::Type,
+        buf: &mut B,
+        ctx: DecodeContext,
+    ) -> Result<(), DecodeError> {
+        string::merge(wire_type, value, buf, ctx)
+    }
+}
+
 pub trait BytesAdapter: sealed::BytesAdapter {}
 
 mod sealed {
